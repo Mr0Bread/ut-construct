@@ -10,9 +10,17 @@ const {
     UploadTrigger,
     Textarea,
     FileGallery,
+    useUtConstruct
 } = generateConstruct<OurFileRouter>()
 
 export default function Page() {
+    const {
+        control,
+        triggerUpload
+    } = useUtConstruct({
+        endpoint: "imageUploader"
+    })
+
     return (
         <main
             className='flex flex-row justify-center mt-10'
@@ -21,11 +29,18 @@ export default function Page() {
                 className='w-full max-w-3xl flex flex-col items-center'
             >
                 <UploadRoot
-                    endpoint='imageUploader'
+                    control={control}
                 >
                     <Textarea />
                     <FileGallery />
-                    <UploadTrigger />
+                    <button
+                        onClick={() => {
+                            void triggerUpload()
+                        }}
+                        className="relative mt-4 flex h-10 w-36 items-center justify-center overflow-hidden rounded-md text-white after:transition-[width] after:duration-500 bg-blue-600 border-none cursor-pointer hover:bg-blue-500 transition-colors"
+                    >
+                        Upload
+                    </button>
                 </UploadRoot>
             </div>
         </main>

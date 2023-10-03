@@ -7,14 +7,6 @@ import { DropzoneOptions, FileWithPath, useDropzone } from './use-dropzone'
 import { allowedContentTextLabelGenerator, generateClientDropzoneAccept, generatePermittedFileTypes, type UploadFileResponse } from "uploadthing/client";
 import { twMerge } from 'tailwind-merge'
 
-export type UploadRootProps<TRouter extends FileRouter> = UploadthingComponentProps<TRouter> & {
-    children: JSX.Element | JSX.Element[]
-}
-
-export type UploadTriggerProps<TRouter extends FileRouter> = {
-
-}
-
 function getFilesFromClipboardEvent(event: ClipboardEvent) {
     const dataTransferItems = event.clipboardData?.items;
     if (!dataTransferItems) return;
@@ -45,10 +37,19 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
         multiple: boolean;
         isReady: boolean;
         allowedContentTextLabel: string;
-        triggerUpload: () => Promise<UploadFileResponse[] | undefined> | false;
+        triggerUpload: () => Promise<UploadFileResponse[] | undefined>;
     }
 
     type FinalContextType = RootContextType<TRouter>
+
+    type UploadRootProps = UploadthingComponentProps<TRouter> & {
+        children: JSX.Element | JSX.Element[];
+    } | Omit<UploadthingComponentProps<TRouter>, "endpoint"> & {
+        children: JSX.Element | JSX.Element[];
+        control: FinalContextType;
+    }
+    
+    type UploadConstructHookProps = UploadthingComponentProps<TRouter>;
 
     const RootContext = createContext<FinalContextType>(
         {} as FinalContextType
@@ -199,16 +200,16 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
 
     const UploadTrigger = ({
         render,
-        children,
-        className
+        className,
+        afterUpload
     }: {
         render?: (opts: FinalContextType & {
             onClick: () => void;
             getDefaultButtonText: () => string;
             getDefaultClasses: () => string;
         }) => ReactNode;
-        children?: ReactNode;
-        className?: string
+        className?: string;
+        afterUpload?: (res: UploadFileResponse[]) => Promise<void> | void
     }) => {
         const context = useContext(RootContext)
         const {
@@ -221,7 +222,7 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
         } = context;
 
         const defaultOnClick = useCallback(
-            () => {
+            async () => {
                 if (!files.length) return;
 
                 return startUpload(files, input)
@@ -257,12 +258,6 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
             getDefaultClasses
         });
 
-        if (children) return (
-            <button>
-                {children}
-            </button>
-        );
-
         return (
             <button
                 className={
@@ -271,7 +266,16 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
                         className
                     )
                 }
-                onClick={defaultOnClick}
+                onClick={() => {
+                    defaultOnClick()
+                        .then(
+                            (res) => {
+                                if (!res) return;
+
+                                if (afterUpload) afterUpload(res)
+                            }
+                        )
+                }}
             >
                 {getDefaultButtonText()}
             </button>
@@ -476,9 +480,18 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
     const UploadRoot = (
         props: FileRouter extends TRouter
             ? "Where's the generic lebowski"
-            : UploadRootProps<TRouter>
+            : UploadRootProps
     ) => {
-        const $props = props as unknown as UploadRootProps<TRouter>;
+        const $props = props as unknown as UploadRootProps;
+
+        if ("control" in $props) {
+            return (
+                <RootContext.Provider value={$props.control}>
+                    {$props.children}
+                </RootContext.Provider>
+            );
+        }
+
         const {
             endpoint,
             onClientUploadComplete,
@@ -513,8 +526,8 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
             ? [files: File[], input?: undefined]
             : [files: File[], input: InferredInput];
 
-        const triggerUpload = () => {
-            if (!droppedFiles.length) return false;
+        const triggerUpload = async () => {
+            if (!droppedFiles.length) return;
 
             return startUpload(droppedFiles, input)
         }
@@ -546,6 +559,73 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
         return context;
     }
 
+    const useUtConstruct = (
+        props: FileRouter extends TRouter
+        ? "Where's the generic lebowski"
+        : UploadConstructHookProps
+    ) => {
+        const $props = props as unknown as UploadConstructHookProps;
+        const {
+            endpoint,
+            onClientUploadComplete,
+            onUploadBegin,
+            onUploadError,
+            onUploadProgress,
+        } = $props;
+        const input = "input" in $props ? $props.input : undefined;
+        const [droppedFiles, setDroppedFiles] = useState<File[]>([])
+        const [dropzoneHelpers, setDropzoneHelpers] = useState<ReturnType<typeof useDropzone>>()
+        const {
+            isUploading,
+            startUpload,
+            permittedFileInfo
+        } = useUploadThing(
+            endpoint
+        )
+
+        const {
+            fileTypes,
+            multiple
+        } = generatePermittedFileTypes(
+            permittedFileInfo?.config
+        )
+        const allowedContentTextLabel = allowedContentTextLabelGenerator(permittedFileInfo?.config)
+
+        const isReady = fileTypes.length > 0;
+
+        type InferredInput = inferEndpointInput<TRouter[typeof endpoint]>;
+        type FuncInput = undefined extends InferredInput
+            ? [files: File[], input?: undefined]
+            : [files: File[], input: InferredInput];
+
+        const triggerUpload = async () => {
+            if (!droppedFiles.length) return;
+
+            return startUpload(droppedFiles, input)
+        }
+
+        const control: FinalContextType = {
+            endpoint: endpoint as RootContextType<TRouter>['endpoint'],
+            files: droppedFiles,
+            setFiles: setDroppedFiles,
+            startUpload: startUpload as (...args: FuncInput) => Promise<UploadFileResponse[] | undefined>,
+            isUploading,
+            setDropzoneHelpers,
+            dropzoneHelpers,
+            input,
+            fileTypes,
+            multiple,
+            isReady,
+            allowedContentTextLabel,
+            triggerUpload
+        };
+
+        return {
+            control,
+            triggerUpload
+        }
+    }
+
     return {
         UploadRoot,
         UploadTrigger,
@@ -554,6 +634,7 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
         RootContext,
         Textarea,
         FileGallery,
-        useUploadContext
+        useUploadContext,
+        useUtConstruct
     };
 }
