@@ -45,6 +45,7 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
         multiple: boolean;
         isReady: boolean;
         allowedContentTextLabel: string;
+        triggerUpload: () => Promise<UploadFileResponse[] | undefined> | false;
     }
 
     type FinalContextType = RootContextType<TRouter>
@@ -383,7 +384,7 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
     }: {
         render?: (opts: FinalContextType & {
             getDefaultClasses: () => string;
-            renderFile: (file: File) => ReactNode;
+            renderFile: (file: File, index: number) => ReactNode;
         }) => ReactNode;
     }) => {
         const context = useContext(RootContext)
@@ -399,8 +400,8 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
             return defaultClasses;
         }
 
-        const renderFile = (file: File) => {
-            return <FilePreviewCard file={file} />
+        const renderFile = (file: File, index: number) => {
+            return <FilePreviewCard key={index} file={file} />
         }
 
         if (render) return render({
@@ -512,6 +513,12 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
             ? [files: File[], input?: undefined]
             : [files: File[], input: InferredInput];
 
+        const triggerUpload = () => {
+            if (!droppedFiles.length) return false;
+
+            return startUpload(droppedFiles, input)
+        }
+
         return (
             <RootContext.Provider value={{
                 endpoint: $props.endpoint as RootContextType<TRouter>['endpoint'],
@@ -525,11 +532,18 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
                 fileTypes,
                 multiple,
                 isReady,
-                allowedContentTextLabel
+                allowedContentTextLabel,
+                triggerUpload
             }}>
                 {children}
             </RootContext.Provider>
         );
+    }
+
+    const useUploadContext = () => {
+        const context = useContext(RootContext)
+
+        return context;
     }
 
     return {
@@ -539,6 +553,7 @@ export const generateConstruct = <TRouter extends FileRouter>() => {
         DropzoneInput,
         RootContext,
         Textarea,
-        FileGallery
+        FileGallery,
+        useUploadContext
     };
 }

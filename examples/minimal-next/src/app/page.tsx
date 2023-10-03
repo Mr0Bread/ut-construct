@@ -9,7 +9,7 @@ const {
     DropzoneInput,
     UploadTrigger,
     Textarea,
-    FileGallery
+    FileGallery,
 } = generateConstruct<OurFileRouter>()
 
 export default function Page() {
